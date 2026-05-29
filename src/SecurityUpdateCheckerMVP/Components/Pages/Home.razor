@@ -1,0 +1,128 @@
+@page "/"
+@using SecurityUpdateCheckerMVP.Models
+@using SecurityUpdateCheckerMVP.Services
+@inject MockDataProvider DataProvider
+@inject AppState State
+@inject NavigationManager Nav
+
+<PageTitle>Тестирование обновлений безопасности</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large">
+    <MudText Typo="Typo.h4" Class="mb-1" Style="font-weight:700;">Тестирование обновлений безопасности</MudText>
+    <MudText Typo="Typo.subtitle1" Color="Color.Secondary" Class="mb-4">Методика ФСТЭК России от 28.10.2022</MudText>
+
+    <MudText Typo="Typo.h6" Class="mb-3">Выберите сценарий</MudText>
+
+    <MudGrid>
+        @for (int i = 0; i < _scenarios.Count; i++)
+        {
+            var idx = i;
+            var s = _scenarios[i];
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Elevation="@(SelectedIndex == idx ? 4 : 1)"
+                         Class="@($"scenario-card cursor-pointer {(SelectedIndex == idx ? "selected" : "")}")"
+                         Style="@GetScenarioStyle(idx)"
+                         @onclick="() => SelectScenario(idx)">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@GetTypeColor(s.Package.SoftwareType)">
+                                @DisplayHelpers.SoftwareTypeLabel(s.Package.SoftwareType)
+                            </MudChip>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudText Typo="Typo.h6">@s.Title</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">@s.Package.Name</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">@s.Description</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+
+    @if (SelectedIndex >= 0)
+    {
+        var pkg = _scenarios[SelectedIndex].Package;
+        <MudPaper Class="pa-6 mt-6" Elevation="1">
+            <MudText Typo="Typo.h6" Class="mb-4">Параметры обновления</MudText>
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="pkg.Name" Label="Наименование" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="pkg.Vendor" Label="Разработчик" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="pkg.Description" Label="Описание" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="pkg.Url" Label="URL" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="pkg.Checksum" Label="Контрольная сумма (ГОСТ 34.11)" Variant="Variant.Outlined" Margin="Margin.Dense" Style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;" />
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudTextField @bind-Value="pkg.Version" Label="Версия" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudSelect @bind-Value="pkg.SoftwareType" Label="Тип ПО" Variant="Variant.Outlined" Margin="Margin.Dense">
+                        <MudSelectItem Value="SoftwareType.Proprietary">Проприетарное</MudSelectItem>
+                        <MudSelectItem Value="SoftwareType.Freeware">Свободно распространяемое</MudSelectItem>
+                        <MudSelectItem Value="SoftwareType.OpenSource">С открытым исходным кодом</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField Value="@(string.Join(", ", pkg.CveIds))" Label="CVE" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  ValueChanged="@((string v) => pkg.CveIds = v.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList())" />
+                </MudItem>
+            </MudGrid>
+
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4"
+                       StartIcon="@Icons.Material.Filled.PlayArrow" Size="Size.Large"
+                       OnClick="StartTesting">
+                Запустить тестирование
+            </MudButton>
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    private List<MockDataProvider.Scenario> _scenarios = new();
+    private int SelectedIndex { get; set; } = -1;
+
+    protected override void OnInitialized()
+    {
+        _scenarios = DataProvider.GetScenarios();
+    }
+
+    private void SelectScenario(int index) => SelectedIndex = index;
+
+    private void StartTesting()
+    {
+        if (SelectedIndex < 0) return;
+        var scenario = _scenarios[SelectedIndex];
+        var run = new TestRun
+        {
+            Package = scenario.Package,
+            Results = Enum.GetValues<TestId>().Select(id => new TestResult { Id = id }).ToList()
+        };
+        State.CurrentRun = run;
+        State.SelectedScenarioIndex = SelectedIndex;
+        State.CurrentScenarioData = scenario.Tests;
+        Nav.NavigateTo("/run");
+    }
+
+    private Color GetTypeColor(SoftwareType t) => t switch
+    {
+        SoftwareType.Proprietary => Color.Info,
+        SoftwareType.Freeware => Color.Success,
+        SoftwareType.OpenSource => Color.Warning,
+        _ => Color.Default
+    };
+
+    private string GetScenarioStyle(int idx)
+    {
+        if (SelectedIndex == idx) return "border: 2px solid var(--mud-palette-primary);";
+        return "border: 2px solid transparent;";
+    }
+}

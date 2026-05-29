@@ -1,0 +1,118 @@
+@page "/report"
+@using SecurityUpdateCheckerMVP.Models
+@using SecurityUpdateCheckerMVP.Services
+@inject AppState State
+@inject VerdictCalculator VerdictCalc
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<PageTitle>Отчёт</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium">
+    @if (State.CurrentRun is null)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+            Нет данных для отчёта. <MudLink Href="/">Выберите сценарий на главной.</MudLink>
+        </MudAlert>
+    }
+    else
+    {
+        var pkg = State.CurrentRun.Package;
+        var verdict = VerdictCalc.Calculate(State.CurrentRun.Results);
+
+        <MudPaper Class="pa-8" Elevation="1">
+            <MudText Typo="Typo.h5" Align="Align.Center" Style="font-weight:700;">
+                Отчёт о результатах тестирования обновления безопасности
+            </MudText>
+            <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary" Class="mb-6">
+                Дата формирования: @DateTime.Now.ToString("dd.MM.yyyy HH:mm")
+            </MudText>
+
+            <MudDivider Class="my-4" />
+
+            <MudText Typo="Typo.h6" Class="mb-3">1. Информация об обновлении</MudText>
+            <MudSimpleTable Dense="true" Hover="true" Elevation="0">
+                <tbody>
+                    <tr><td style="font-weight:600;width:220px;">Наименование</td><td>@pkg.Name</td></tr>
+                    <tr><td style="font-weight:600;">Описание</td><td>@pkg.Description</td></tr>
+                    <tr><td style="font-weight:600;">URL</td><td>@pkg.Url</td></tr>
+                    <tr><td style="font-weight:600;">Контрольная сумма</td><td style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;word-break:break-all;">@pkg.Checksum</td></tr>
+                    <tr><td style="font-weight:600;">Дата выпуска</td><td>@pkg.ReleaseDate.ToString("dd.MM.yyyy")</td></tr>
+                    <tr><td style="font-weight:600;">Разработчик</td><td>@pkg.Vendor</td></tr>
+                    <tr><td style="font-weight:600;">Версия</td><td>@pkg.Version</td></tr>
+                    <tr><td style="font-weight:600;">CVE</td><td>@string.Join(", ", pkg.CveIds)</td></tr>
+                    <tr><td style="font-weight:600;">Тип ПО</td><td>@DisplayHelpers.SoftwareTypeLabel(pkg.SoftwareType)</td></tr>
+                </tbody>
+            </MudSimpleTable>
+
+            <MudDivider Class="my-4" />
+
+            <MudText Typo="Typo.h6" Class="mb-3">2. Результаты тестов</MudText>
+            <MudTable Items="@State.CurrentRun.Results" Hover="true" Dense="true" Elevation="0">
+                <HeaderContent>
+                    <MudTh>Код</MudTh>
+                    <MudTh>Название</MudTh>
+                    <MudTh>Результат</MudTh>
+                    <MudTh>Среда</MudTh>
+                    <MudTh>Описание</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd><strong>@TestDefinitions.All[context.Id].Code</strong></MudTd>
+                    <MudTd>@TestDefinitions.All[context.Id].Title</MudTd>
+                    <MudTd><StatusBadge Status="@context.Status" /></MudTd>
+                    <MudTd>@DisplayHelpers.EnvironmentLabel(context.Environment)</MudTd>
+                    <MudTd>
+                        @if (context.Findings.Any())
+                        {
+                            @foreach (var f in context.Findings) { <div>@f</div> }
+                        }
+                        else
+                        {
+                            <span>—</span>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+
+            <MudDivider Class="my-4" />
+
+            <MudText Typo="Typo.h6" Class="mb-3">3. Заключение</MudText>
+            <VerdictBanner VerdictValue="@verdict" />
+
+            @if (verdict == Verdict.Unsafe)
+            {
+                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-3">
+                    Необходимо направить сведения о выявленных НДВ во ФСТЭК России (webmaster@bdu.fstec.ru) и НКЦКИ.
+                </MudAlert>
+            }
+            @if (verdict == Verdict.SafeWithRestrictions)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-3">
+                    Установка допускается при соблюдении ограничений: дополнительный мониторинг, ограничение сетевого доступа, контроль целостности.
+                </MudAlert>
+            }
+        </MudPaper>
+
+        <div class="d-flex justify-center gap-3 mt-4 no-print">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="PrintReport"
+                       StartIcon="@Icons.Material.Filled.Print">Печать</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Secondary" OnClick="SendReport"
+                       StartIcon="@Icons.Material.Filled.Send">Сформировать и направить</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick='() => Nav.NavigateTo("/")'
+                       StartIcon="@Icons.Material.Filled.Home">На главную</MudButton>
+        </div>
+    }
+</MudContainer>
+
+@code {
+    private async Task PrintReport()
+    {
+        await JS.InvokeVoidAsync("print");
+    }
+
+    private void SendReport()
+    {
+        Snackbar.Add("Отчёт сформирован", Severity.Success);
+    }
+}

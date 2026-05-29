@@ -1,0 +1,240 @@
+@page "/run"
+@using SecurityUpdateCheckerMVP.Models
+@using SecurityUpdateCheckerMVP.Services
+@inject AppState State
+@inject MockTestRunner Runner
+@inject PipelineProfile Profile
+@inject VerdictCalculator VerdictCalc
+@inject NavigationManager Nav
+@implements IDisposable
+@rendermode InteractiveServer
+
+<PageTitle>Прогон тестирования</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium">
+    @if (State.CurrentRun is null)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+            Нет активного прогона. <MudLink Href="/">Выберите сценарий на главной.</MudLink>
+        </MudAlert>
+    }
+    else
+    {
+        <MudPaper Class="pa-4 mb-4" Elevation="1">
+            <div class="d-flex align-center gap-3">
+                <MudIcon Icon="@Icons.Material.Filled.Science" Size="Size.Large" Color="Color.Primary" />
+                <div>
+                    <MudText Typo="Typo.h5" Style="font-weight:700;">@State.CurrentRun.Package.Name</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">@State.CurrentRun.Package.Vendor — v@(State.CurrentRun.Package.Version)</MudText>
+                </div>
+                <MudSpacer />
+                @if (_hasStarted && !_isFinished)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Filled" Icon="@Icons.Material.Filled.PlayArrow">Выполняется</MudChip>
+                }
+                @if (_isFinished)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="@GetVerdictColor()" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Check">Завершено</MudChip>
+                }
+            </div>
+        </MudPaper>
+
+        <div class="pipeline-timeline">
+            @{ var autoTests = State.CurrentRun.Results.Where(r => r.Id != TestId.T006).ToList(); }
+            @for (var i = 0; i < autoTests.Count; i++)
+            {
+                var result = autoTests[i];
+                var def = TestDefinitions.All[result.Id];
+                var isMandatory = Profile.IsMandatory(State.CurrentRun.Package.SoftwareType, result.Id);
+                var isLast = i == autoTests.Count - 1;
+                var isActive = result.Status == TestStatus.Running;
+                var isDone = result.Status is TestStatus.Passed or TestStatus.Warning or TestStatus.Failed or TestStatus.Skipped;
+
+                <div class="timeline-step @(isActive ? "timeline-step--active" : "") @(isDone ? "timeline-step--done" : "")">
+                    <div class="timeline-indicator">
+                        <div class="timeline-dot @GetDotClass(result.Status)">
+                            @if (isActive)
+                            {
+                                <MudProgressCircular Size="Size.Small" Color="Color.Inherit" Indeterminate="true" Style="width:18px;height:18px;" />
+                            }
+                            else if (result.Status == TestStatus.Passed)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" />
+                            }
+                            else if (result.Status == TestStatus.Warning)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" />
+                            }
+                            else if (result.Status == TestStatus.Failed)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Small" />
+                            }
+                            else
+                            {
+                                <span class="timeline-step-number">@(i + 1)</span>
+                            }
+                        </div>
+                        @if (!isLast)
+                        {
+                            <div class="timeline-connector @(isDone ? "timeline-connector--done" : "")"></div>
+                        }
+                    </div>
+
+                    <div class="timeline-content">
+                        <div class="d-flex align-center gap-2 flex-wrap">
+                            <MudText Typo="Typo.subtitle2" Color="Color.Primary" Class="test-code-label">@def.Code</MudText>
+                            <MudText Typo="Typo.subtitle1" Style="font-weight:600;">@def.Title</MudText>
+                            @if (isMandatory)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">обяз.</MudChip>
+                            }
+                            @if (result.RoutedToManualAnalysis)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.ArrowDownward">Т006</MudChip>
+                            }
+                            <MudSpacer />
+                            <StatusBadge Status="@result.Status" />
+                        </div>
+
+                        @if (!isDone && !isActive)
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">@def.ShortDescription</MudText>
+                        }
+
+                        @if (isActive || (isDone && result.LogLines.Count > 0))
+                        {
+                            <LogTicker Lines="@result.LogLines" IsActive="@isActive" />
+                        }
+
+                        @if (result.Findings.Count > 0 && isDone)
+                        {
+                            <div class="mt-2">
+                                @foreach (var finding in result.Findings)
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">@finding</MudText>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @if (GetRoutedTests().Any())
+        {
+            <div class="d-flex align-center gap-2 my-4 ml-6">
+                <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Color="Color.Secondary" Size="Size.Small" />
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Style="font-weight:600;">Направлено на ручной анализ</MudText>
+            </div>
+        }
+
+        <div class="timeline-step timeline-step--manual @(T006Active ? "timeline-step--active" : "") @(T006Done ? "timeline-step--done" : "")">
+            <div class="timeline-indicator">
+                <div class="timeline-dot timeline-dot--manual @GetDotClass(T006Result.Status)">
+                    @if (T006Active)
+                    {
+                        <MudProgressCircular Size="Size.Small" Color="Color.Inherit" Indeterminate="true" Style="width:18px;height:18px;" />
+                    }
+                    else if (T006Done)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" />
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                    }
+                </div>
+            </div>
+            <div class="timeline-content">
+                <div class="d-flex align-center gap-2 flex-wrap">
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary" Class="test-code-label">@T006Def.Code</MudText>
+                    <MudText Typo="Typo.subtitle1" Style="font-weight:600;">@T006Def.Title</MudText>
+                    <MudSpacer />
+                    <StatusBadge Status="@T006Result.Status" />
+                </div>
+                @if (T006Active || (T006Done && T006Result.LogLines.Count > 0))
+                {
+                    <LogTicker Lines="@T006Result.LogLines" IsActive="@T006Active" />
+                }
+                @if (T006Result.Findings.Count > 0 && T006Done)
+                {
+                    <div class="mt-2">
+                        @foreach (var finding in T006Result.Findings)
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">@finding</MudText>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @if (_isFinished)
+        {
+            <div class="mt-6">
+                <VerdictBanner VerdictValue="@_verdict" />
+                <div class="d-flex justify-center mt-4">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large"
+                               EndIcon="@Icons.Material.Filled.ArrowForward"
+                               OnClick="@(() => Nav.NavigateTo("/results"))">
+                        Перейти к результатам
+                    </MudButton>
+                </div>
+            </div>
+        }
+    }
+</MudContainer>
+
+@code {
+    private CancellationTokenSource _cts = new();
+    private bool _isFinished;
+    private Verdict _verdict;
+    private bool _hasStarted;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && State.CurrentRun is not null && State.CurrentScenarioData is not null && !_hasStarted)
+        {
+            _hasStarted = true;
+            try
+            {
+                await Runner.RunAsync(State.CurrentRun, State.CurrentScenarioData, () => InvokeAsync(StateHasChanged), _cts.Token);
+                _verdict = VerdictCalc.Calculate(State.CurrentRun.Results);
+                _isFinished = true;
+                await InvokeAsync(StateHasChanged);
+            }
+            catch (OperationCanceledException) { }
+        }
+    }
+
+    private TestResult T006Result => State.CurrentRun!.Results.First(r => r.Id == TestId.T006);
+    private TestDefinition T006Def => TestDefinitions.All[TestId.T006];
+    private bool T006Active => T006Result.Status == TestStatus.Running;
+    private bool T006Done => T006Result.Status is TestStatus.Passed or TestStatus.Warning or TestStatus.Failed or TestStatus.Skipped;
+
+    private List<TestResult> GetRoutedTests() =>
+        State.CurrentRun?.Results.Where(r => r.RoutedToManualAnalysis && r.Id != TestId.T006).ToList() ?? new();
+
+    private Color GetVerdictColor() => _verdict switch
+    {
+        Verdict.Safe => Color.Success,
+        Verdict.SafeWithRestrictions => Color.Warning,
+        Verdict.Unsafe => Color.Error,
+        _ => Color.Default
+    };
+
+    private string GetDotClass(TestStatus status) => status switch
+    {
+        TestStatus.Passed => "timeline-dot--success",
+        TestStatus.Warning => "timeline-dot--warning",
+        TestStatus.Failed => "timeline-dot--error",
+        TestStatus.Running => "timeline-dot--running",
+        TestStatus.Skipped => "timeline-dot--skipped",
+        _ => "timeline-dot--pending"
+    };
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

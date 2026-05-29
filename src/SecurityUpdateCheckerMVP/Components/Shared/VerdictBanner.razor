@@ -1,0 +1,44 @@
+@using SecurityUpdateCheckerMVP.Models
+
+<MudAlert Severity="@GetSeverity()" Variant="Variant.Filled" Class="verdict-banner my-4" Icon="@GetIcon()" NoIcon="false">
+    <div>
+        <MudText Typo="Typo.h5" Class="mb-1" Style="font-weight:700;">@VerdictTitle</MudText>
+        <MudText Typo="Typo.body1">@VerdictDescription</MudText>
+    </div>
+</MudAlert>
+
+@code {
+    [Parameter] public Verdict VerdictValue { get; set; }
+
+    private Severity GetSeverity() => VerdictValue switch
+    {
+        Verdict.Safe => Severity.Success,
+        Verdict.SafeWithRestrictions => Severity.Warning,
+        Verdict.Unsafe => Severity.Error,
+        _ => Severity.Normal
+    };
+
+    private string GetIcon() => VerdictValue switch
+    {
+        Verdict.Safe => Icons.Material.Filled.VerifiedUser,
+        Verdict.SafeWithRestrictions => Icons.Material.Filled.Warning,
+        Verdict.Unsafe => Icons.Material.Filled.GppBad,
+        _ => Icons.Material.Filled.Info
+    };
+
+    private string VerdictTitle => VerdictValue switch
+    {
+        Verdict.Safe => "Безопасно",
+        Verdict.SafeWithRestrictions => "С ограничениями",
+        Verdict.Unsafe => "Небезопасно",
+        _ => ""
+    };
+
+    private string VerdictDescription => VerdictValue switch
+    {
+        Verdict.Safe => "Обновление безопасно. Установка возможна.",
+        Verdict.SafeWithRestrictions => "Обновление может быть установлено при определённых ограничениях.",
+        Verdict.Unsafe => "Обновление небезопасно. Устанавливать не рекомендуется.",
+        _ => ""
+    };
+}

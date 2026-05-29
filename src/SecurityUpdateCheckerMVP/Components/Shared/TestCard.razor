@@ -1,0 +1,70 @@
+@using SecurityUpdateCheckerMVP.Models
+@using SecurityUpdateCheckerMVP.Services
+
+<MudCard Elevation="1" Class="@GetCardClass()" Style="@GetCardStyle()">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <div class="d-flex align-center gap-2">
+                <MudText Typo="Typo.subtitle2" Color="Color.Primary" Class="test-code-label">@Definition.Code</MudText>
+                <MudText Typo="Typo.subtitle1" Style="font-weight:600;">@Definition.Title</MudText>
+            </div>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            <div class="d-flex align-center gap-1">
+                @if (IsMandatory)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">обяз.</MudChip>
+                }
+                @if (Result.RoutedToManualAnalysis)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined">Т006</MudChip>
+                }
+                <StatusBadge Status="@Result.Status" />
+            </div>
+        </CardHeaderActions>
+    </MudCardHeader>
+
+    @if (Result.Status == TestStatus.Running || Result.LogLines.Count > 0)
+    {
+        <MudCardContent Class="pt-0">
+            <LogTicker Lines="@Result.LogLines" IsActive="@(Result.Status == TestStatus.Running)" />
+        </MudCardContent>
+    }
+
+    @if (Result.Findings.Count > 0 && Result.Status is not (TestStatus.Running or TestStatus.Pending))
+    {
+        <MudCardContent Class="pt-0">
+            @foreach (var finding in Result.Findings)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">@finding</MudText>
+            }
+        </MudCardContent>
+    }
+</MudCard>
+
+@code {
+    [Parameter] public TestResult Result { get; set; } = default!;
+    [Parameter] public TestDefinition Definition { get; set; } = default!;
+    [Parameter] public bool IsMandatory { get; set; }
+
+    private string GetCardClass()
+    {
+        var cls = "test-card mb-3";
+        if (Result.Status == TestStatus.Running) cls += " test-card-active";
+        if (Result.Status == TestStatus.Skipped || Result.Status == TestStatus.Pending) cls += " test-card-dim";
+        return cls;
+    }
+
+    private string GetCardStyle()
+    {
+        var color = Result.Status switch
+        {
+            TestStatus.Passed => "var(--mud-palette-success)",
+            TestStatus.Warning => "var(--mud-palette-warning)",
+            TestStatus.Failed => "var(--mud-palette-error)",
+            TestStatus.Running => "var(--mud-palette-info)",
+            _ => "transparent"
+        };
+        return $"border-left: 3px solid {color};";
+    }
+}

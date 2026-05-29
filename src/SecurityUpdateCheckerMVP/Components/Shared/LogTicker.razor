@@ -1,0 +1,22 @@
+<MudPaper Class="log-ticker pa-3 mt-2" Elevation="0">
+    <div class="terminal-body" @ref="_logContainer">
+        @foreach (var line in Lines)
+        {
+            <div class="log-line">
+                <span class="log-prompt">~$</span> @line
+            </div>
+        }
+        @if (IsActive)
+        {
+            <div class="log-line">
+                <span class="log-prompt">~$</span> <span class="cursor-blink">_</span>
+            </div>
+        }
+    </div>
+</MudPaper>
+
+@code {
+    [Parameter] public List<string> Lines { get; set; } = new();
+    [Parameter] public bool IsActive { get; set; }
+    private ElementReference _logContainer;
+}

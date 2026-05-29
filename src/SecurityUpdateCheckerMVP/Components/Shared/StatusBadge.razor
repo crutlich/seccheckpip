@@ -1,0 +1,35 @@
+@using SecurityUpdateCheckerMVP.Models
+
+<MudChip T="string" Size="Size.Small" Color="@GetColor()" Variant="Variant.Filled" Class="status-chip">
+    @if (Status == TestStatus.Running)
+    {
+        <MudProgressCircular Size="Size.Small" Color="Color.Inherit" Indeterminate="true" Class="mr-1" Style="width:14px;height:14px;" />
+    }
+    @StatusText
+</MudChip>
+
+@code {
+    [Parameter] public TestStatus Status { get; set; }
+
+    private Color GetColor() => Status switch
+    {
+        TestStatus.Passed => Color.Success,
+        TestStatus.Warning => Color.Warning,
+        TestStatus.Failed => Color.Error,
+        TestStatus.Running => Color.Info,
+        TestStatus.Skipped => Color.Default,
+        TestStatus.Pending => Color.Default,
+        _ => Color.Default
+    };
+
+    private string StatusText => Status switch
+    {
+        TestStatus.Pending => "Ожидание",
+        TestStatus.Running => "Выполняется",
+        TestStatus.Skipped => "Пропущен",
+        TestStatus.Passed => "Пройден",
+        TestStatus.Warning => "Внимание",
+        TestStatus.Failed => "Не пройден",
+        _ => ""
+    };
+}

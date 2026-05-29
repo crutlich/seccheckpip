@@ -1,0 +1,81 @@
+@page "/results"
+@using SecurityUpdateCheckerMVP.Models
+@using SecurityUpdateCheckerMVP.Services
+@inject AppState State
+@inject VerdictCalculator VerdictCalc
+@inject NavigationManager Nav
+
+<PageTitle>Результаты тестирования</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large">
+    @if (State.CurrentRun is null)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+            Нет результатов. <MudLink Href="/">Выберите сценарий на главной.</MudLink>
+        </MudAlert>
+    }
+    else
+    {
+        var verdict = VerdictCalc.Calculate(State.CurrentRun.Results);
+
+        <MudText Typo="Typo.h4" Class="mb-1" Style="font-weight:700;">Результаты</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">@State.CurrentRun.Package.Name</MudText>
+
+        <VerdictBanner VerdictValue="@verdict" />
+
+        @if (verdict == Verdict.Unsafe)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="my-3" Icon="@Icons.Material.Filled.Report">
+                Необходимо направить сведения о выявленных НДВ во ФСТЭК России (webmaster@bdu.fstec.ru) и НКЦКИ.
+            </MudAlert>
+        }
+        @if (verdict == Verdict.SafeWithRestrictions)
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="my-3">
+                Рекомендуется дополнительный мониторинг после установки. Установка допускается только в контролируемой среде с ограничением сетевого доступа.
+            </MudAlert>
+        }
+
+        <MudTable Items="@State.CurrentRun.Results" Hover="true" Elevation="1" Class="mt-4" Dense="true">
+            <HeaderContent>
+                <MudTh>Код</MudTh>
+                <MudTh>Название теста</MudTh>
+                <MudTh>Результат</MudTh>
+                <MudTh>Среда</MudTh>
+                <MudTh>Описание</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Код">
+                    <MudText Typo="Typo.body2" Style="font-weight:700;">@TestDefinitions.All[context.Id].Code</MudText>
+                </MudTd>
+                <MudTd DataLabel="Название">@TestDefinitions.All[context.Id].Title</MudTd>
+                <MudTd DataLabel="Результат"><StatusBadge Status="@context.Status" /></MudTd>
+                <MudTd DataLabel="Среда">@DisplayHelpers.EnvironmentLabel(context.Environment)</MudTd>
+                <MudTd DataLabel="Описание">
+                    @if (context.Findings.Any())
+                    {
+                        @foreach (var f in context.Findings)
+                        {
+                            <MudText Typo="Typo.body2">@f</MudText>
+                        }
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">—</MudText>
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+
+        <div class="d-flex gap-3 mt-6">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick='() => Nav.NavigateTo("/report")'
+                       StartIcon="@Icons.Material.Filled.Description">
+                Перейти к отчёту
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick='() => Nav.NavigateTo("/")'
+                       StartIcon="@Icons.Material.Filled.Refresh">
+                Новое тестирование
+            </MudButton>
+        </div>
+    }
+</MudContainer>
